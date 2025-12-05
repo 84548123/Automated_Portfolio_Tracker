@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Advanced Portfolio Advisor</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @import url('https://rsms.me/inter/inter.css');
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #10b981;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .allocation-bar {
+            display: flex;
+            height: 40px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background-color: #374151;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-10 space-y-6">
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500">Live Advanced Portfolio Advisor</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-2 text-lg">Get real-time allocation suggestions using a variety of analysis models.</p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 items-end gap-4">
+             <div class="w-full">
+                <label for="modelType" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">1. Select Analysis Model</label>
+                <select id="modelType" class="w-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-2 border-gray-300 dark:border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <option value="combined">Combined Signal Model (Most Robust)</option>
+                    <option value="indicators">Technical Indicators (Fast)</option>
+                    <option value="lstm">Advanced Model (LSTM)</option>
+                    <option value="fundamentals">Fundamental Analysis (P/E Ratio)</option>
+                </select>
+            </div>
+            <div class="w-full">
+                <label for="riskProfile" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">2. Select Your Risk Profile</label>
+                <select id="riskProfile" class="w-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-2 border-gray-300 dark:border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition">
+                    <option value="conservative">Conservative</option>
+                    <option value="balanced" selected>Balanced</option>
+                    <option value="aggressive">Aggressive</option>
+                </select>
+            </div>
+            <button id="suggestBtn" class="w-full md:col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 mt-4 md:mt-0">
+                <i class="fas fa-satellite-dish"></i>
+                <span>Get Live Suggestion</span>
+            </button>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="space-y-6 pt-4">
+            <div id="status" class="text-center text-gray-600 dark:text-gray-300 text-lg p-4 rounded-lg bg-gray-200 dark:bg-gray-700/50 hidden"></div>
+            <div id="allocation-container" class="hidden"></div>
+            <div id="analysis-container" class="hidden"></div>
+            <div id="suggestions-container" class="hidden bg-gray-200 dark:bg-gray-700/50 p-6 rounded-lg">
+                <h3 class="text-xl font-semibold mb-3 text-emerald-500 flex items-center gap-2"><i class="fas fa-lightbulb"></i>How to Get Better Suggestions</h3>
+                 <ul class="list-disc list-inside text-sm space-y-2 text-gray-700 dark:text-gray-300">
+                    <li><strong>Refine Model Weights:</strong> Adjust the importance (weights) of each signal in the Combined Model based on backtesting results.</li>
+                    <li><strong>Expand Diversification:</strong> A real-world portfolio should include other asset classes like Gold, Bonds, and International Equities to reduce overall risk.</li>
+                    <li><strong>Backtest the Strategy:</strong> Use historical data to test how the Combined Model would have performed in different market conditions over the long term.</li>
+                </ul>
+                <p class="text-xs text-gray-500 dark:text-gray-500 mt-4"><strong>Disclaimer:</strong> This is an educational tool and does not constitute financial advice.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- UI Element References ---
+        const riskProfileEl = document.getElementById('riskProfile');
+        const modelTypeEl = document.getElementById('modelType');
+        const suggestBtn = document.getElementById('suggestBtn');
+        const statusEl = document.getElementById('status');
+        const allocationContainer = document.getElementById('allocation-container');
+        const analysisContainer = document.getElementById('analysis-container');
+        const suggestionsContainer = document.getElementById('suggestions-container');
+
+        suggestBtn.addEventListener('click', handleSuggestion);
+
+        // --- Main Handler ---
+        async function handleSuggestion() {
+            resetUI();
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Initializing analysis...</p>');
+
+            const modelType = modelTypeEl.value;
+            const riskProfile = riskProfileEl.value;
+
+            try {
+                if (modelType === 'combined') {
+                    await handleCombinedModel(riskProfile);
+                } else if (modelType === 'indicators') {
+                    await handleIndicatorsModel(riskProfile);
+                } else if (modelType === 'lstm') {
+                    await handleLstmModel(riskProfile);
+                } else if (modelType === 'fundamentals') {
+                    await handleFundamentalsModel(riskProfile);
+                }
+            } catch (error) {
+                console.error('Suggestion Error:', error);
+                showStatus(`❌ An error occurred. <br><small>${error.message}</small>`, 'error');
+            }
+        }
+        
+        // --- Model-Specific Handlers ---
+        async function handleIndicatorsModel(riskProfile) {
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Fetching live price data...</p>');
+            const { niftyPrices, niftyName, smallcapPrices, smallcapName } = await fetchPriceDataWithFallbacks();
+            const niftyAnalysis = analyzeWithIndicators(niftyPrices, niftyName);
+            const smallcapAnalysis = analyzeWithIndicators(smallcapPrices, smallcapName);
+            const allocation = determineAllocationFromIndicators(niftyAnalysis, smallcapAnalysis, riskProfile);
+            displayResults(allocation, {nifty_tech: niftyAnalysis, smallcap_tech: smallcapAnalysis});
+        }
+
+        async function handleLstmModel(riskProfile) {
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Fetching live price data...</p>');
+            const { niftyPrices, niftyName, smallcapPrices, smallcapName } = await fetchPriceDataWithFallbacks();
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Running LSTM analysis...</p>');
+            const niftyAnalysis = analyzeWithLSTM(niftyPrices, niftyName);
+            const smallcapAnalysis = analyzeWithLSTM(smallcapPrices, smallcapName);
+            const allocation = determineAllocationFromLSTM(niftyAnalysis, smallcapAnalysis, riskProfile);
+            displayResults(allocation, {nifty_tech: niftyAnalysis, smallcap_tech: smallcapAnalysis});
+        }
+
+        async function handleFundamentalsModel(riskProfile) {
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Fetching fundamental data...</p>');
+            const { niftyPEData, niftyName } = await fetchFundamentalDataWithFallback();
+            const niftyAnalysis = analyzeWithFundamentals(niftyPEData, niftyName);
+            const allocation = determineAllocationFromFundamentals(niftyAnalysis, riskProfile);
+            displayResults(allocation, {nifty_tech: niftyAnalysis});
+        }
+        
+        async function handleCombinedModel(riskProfile) {
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Fetching all required data...</p>');
+            const { niftyPrices, niftyName, smallcapPrices, smallcapName } = await fetchPriceDataWithFallbacks();
+            const { niftyPEData, niftyName: fundNiftyName } = await fetchFundamentalDataWithFallback();
+
+            showStatus('<div class="loader mx-auto"></div><p class="mt-2">Running all analysis models...</p>');
+            const niftyTech = analyzeWithIndicators(niftyPrices, niftyName);
+            const smallcapTech = analyzeWithIndicators(smallcapPrices, smallcapName);
+            const niftyLstm = analyzeWithLSTM(niftyPrices, niftyName);
+            const smallcapLstm = analyzeWithLSTM(smallcapPrices, smallcapName);
+            const niftyFund = analyzeWithFundamentals(niftyPEData, fundNiftyName);
+
+            const allocation = determineAllocationFromCombined(niftyTech, smallcapTech, niftyLstm, smallcapLstm, niftyFund, riskProfile);
+            const allAnalyses = {
+                nifty_tech: niftyTech, smallcap_tech: smallcapTech,
+                nifty_lstm: niftyLstm, smallcap_lstm: smallcapLstm,
+                nifty_fund: niftyFund
+            };
+            displayResults(allocation, allAnalyses);
+        }
+
+        // --- Data Fetching ---
+        async function fetchPriceDataWithFallbacks() {
+            const niftyTickers = [
+                { ticker: 'NIFTYBEES.NS', name: "Nifty 50 (NiftyBees ETF)" },
+                { ticker: 'ICICINIFTY.NS', name: "Nifty 50 (ICICI ETF)" },
+                { ticker: 'SETFNIF50.NS', name: "Nifty 50 (SETF ETF)" }
+            ];
+            const smallcapTickers = [
+                { ticker: 'HDFCSML250.NS', name: "Smallcap 250 (HDFC ETF)" },
+                { ticker: 'SMALL250.NS', name: "Smallcap 250 (Nippon ETF)" }
+            ];
+
+            let niftyPrices, niftyName;
+            for (const item of niftyTickers) {
+                try {
+                    niftyPrices = await fetchData(item.ticker, 200);
+                    niftyName = item.name;
+                    showStatus(`<div class="loader mx-auto"></div><p class="mt-2">Fetched Nifty 50 data via ${item.ticker}...</p>`);
+                    break;
+                } catch (e) {
+                    console.warn(`${item.ticker} failed, trying next...`);
+                    showStatus(`<div class="loader mx-auto"></div><p class="mt-2">${item.ticker} failed, trying next fallback...</p>`);
+                }
+            }
+            if (!niftyPrices) throw new Error("All Nifty 50 tickers failed. The data sources may be temporarily unavailable.");
+
+            let smallcapPrices, smallcapName;
+            for (const item of smallcapTickers) {
+                try {
+                    smallcapPrices = await fetchData(item.ticker, 200);
+                    smallcapName = item.name;
+                    showStatus(`<div class="loader mx-auto"></div><p class="mt-2">Fetched Smallcap 250 data via ${item.ticker}...</p>`);
+                    break;
+                } catch (e) {
+                    console.warn(`${item.ticker} failed, trying next...`);
+                    showStatus(`<div class="loader mx-auto"></div><p class="mt-2">${item.ticker} failed, trying next fallback...</p>`);
+                }
+            }
+            if (!smallcapPrices) throw new Error("All Smallcap 250 tickers failed. The data sources may be temporarily unavailable.");
+            
+            return { niftyPrices, niftyName, smallcapPrices, smallcapName };
+        }
+
+        async function fetchFundamentalDataWithFallback() {
+             const niftyTickers = [
+                { ticker: 'NIFTYBEES.NS', name: "Nifty 50 (NiftyBees ETF)" },
+                { ticker: 'ICICINIFTY.NS', name: "Nifty 50 (ICICI ETF)" },
+                { ticker: 'SETFNIF50.NS', name: "Nifty 50 (SETF ETF)" }
+            ];
+            for (const item of niftyTickers) {
+                 try {
+                    const niftyPEData = await fetchFundamentalData(item.ticker);
+                    return { niftyPEData, niftyName: item.name };
+                 } catch (e) {
+                     console.warn(`${item.ticker} failed for fundamentals, trying next...`);
+                     showStatus(`<div class="loader mx-auto"></div><p class="mt-2">Fundamentals for ${item.ticker} failed, trying next...</p>`);
+                 }
+            }
+             throw new Error("All Nifty 50 tickers failed for fundamental data.");
+        }
+        
+        async function fetchData(ticker, requiredDays) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const endDate = new Date(), startDate = new Date();
+            startDate.setDate(endDate.getDate() - 550);
+            const startTimestamp = Math.floor(startDate.getTime() / 1000);
+            const endTimestamp = Math.floor(endDate.getTime() / 1000);
+            const targetUrl = `https://query1.finance.yahoo.com/v7/finance/download/${ticker}?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d&events=history`;
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+                `https://cors.bridged.cc/${targetUrl}`,
+                `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+            ];
+            let lastError = null;
+            for (const proxyUrl of proxies) {
+                try {
+                    const response = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error(`Proxy error (Status: ${response.status})`);
+                    const csvData = await response.text();
+                    if (csvData.includes("404 Not Found") || csvData.trim() === "") throw new Error(`Invalid symbol`);
+                    const prices = csvData.split('\n').slice(1).map(line => parseFloat(line.split(',')[4])).filter(p => !isNaN(p));
+                    if (prices.length < requiredDays) throw new Error(`Incomplete data (${prices.length}/${requiredDays} days)`);
+                    return prices;
+                } catch (error) {
+                    console.warn(`Proxy failed for ${ticker}: ${error.message}`);
+                    lastError = error;
+                }
+            }
+            clearTimeout(timeoutId);
+            if (lastError.name === 'AbortError') throw new Error(`Network timeout for "${ticker}"`);
+            throw new Error(`All data fetch attempts failed for "${ticker}": ${lastError.message}`);
+        }
+
+        async function fetchFundamentalData(ticker) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const targetUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`;
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+                `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+                `https://cors.bridged.cc/${targetUrl}`,
+                `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+            ];
+            let lastError = null;
+            for (const proxyUrl of proxies) {
+                try {
+                     const response = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
+                     clearTimeout(timeoutId);
+                     if (!response.ok) throw new Error(`Proxy error (Status: ${response.status})`);
+                     const jsonData = await response.json();
+                     const peRatio = jsonData?.quoteSummary?.result?.[0]?.summaryDetail?.trailingPE?.raw || jsonData?.quoteSummary?.result?.[0]?.summaryDetail?.forwardPE?.raw;
+                     if (!peRatio) throw new Error("P/E ratio not found in API response");
+                     return { pe_ratio: peRatio };
+                } catch (error) {
+                    console.warn(`Proxy failed for ${ticker} fundamentals: ${error.message}`);
+                    lastError = error;
+                }
+            }
+            clearTimeout(timeoutId);
+            if (lastError.name === 'AbortError') throw new Error(`Network timeout for "${ticker}"`);
+            throw new Error(`Fundamental data fetch failed for "${ticker}": ${lastError.message}`);
+        }
+
+        // --- Display Logic ---
+        function displayResults(allocation, analyses) {
+            statusEl.classList.add('hidden');
+            allocationContainer.classList.remove('hidden');
+            analysisContainer.classList.remove('hidden');
+            suggestionsContainer.classList.remove('hidden');
+            
+            const modelType = analyses.nifty_fund ? 'Combined' : (analyses.nifty_tech.type === 'Indicators' ? 'Technical Indicators' : 'LSTM');
+
+            allocationContainer.innerHTML = `
+                <h3 class="text-xl font-semibold mb-2 text-center text-gray-600 dark:text-gray-300">Suggested Allocation (using ${modelType} Model)</h3>
+                <div class="allocation-bar">
+                    <div style="width: ${allocation.nifty * 100}%;" class="bg-blue-500 flex items-center justify-center text-white font-bold text-lg transition-all duration-500">
+                        <span>Nifty 50: ${Math.round(allocation.nifty * 100)}%</span>
+                    </div>
+                    <div style="width: ${allocation.smallcap * 100}%;" class="bg-emerald-500 flex items-center justify-center text-white font-bold text-lg transition-all duration-500">
+                        <span>Smallcap 250: ${Math.round(allocation.smallcap * 100)}%</span>
+                    </div>
+                </div>`;
+            
+            let analysisHTML = '';
+            if (analyses.nifty_fund) { // Combined Model
+                const lstmWinner = parseFloat(analyses.nifty_lstm.predicted_return) > parseFloat(analyses.smallcap_lstm.predicted_return) ? 'Favors Nifty 50' : 'Favors Smallcap 250';
+                analysisHTML = `
+                    <div class="md:col-span-2 text-center mb-2">
+                        <h4 class="text-lg font-semibold text-gray-700 dark:text-gray-200">Individual Model Signals</h4>
+                    </div>
+                    ${createAnalysisCard(analyses.nifty_tech)}
+                    ${createAnalysisCard(analyses.smallcap_tech)}
+                    <div class="bg-gray-200 dark:bg-gray-700/50 p-4 rounded-lg text-center">
+                        <p class="font-bold">LSTM Signal</p>
+                        <p class="text-lg ${lstmWinner === 'Favors Nifty 50' ? 'text-emerald-400' : 'text-red-400'}">${lstmWinner}</p>
+                    </div>
+                    <div class="bg-gray-200 dark:bg-gray-700/50 p-4 rounded-lg text-center">
+                        <p class="font-bold">Fundamental Signal</p>
+                        <p class="text-lg ${analyses.nifty_fund.valuation.includes('Cheap') ? 'text-emerald-400' : 'text-red-400'}">Market Valuation is ${analyses.nifty_fund.valuation}</p>
+                    </div>
+                `;
+                analysisContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+            } else { // Single Models
+                analysisHTML = createAnalysisCard(analyses.nifty_tech) + (analyses.smallcap_tech ? createAnalysisCard(analyses.smallcap_tech) : '');
+                analysisContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+            }
+            analysisContainer.innerHTML = analysisHTML;
+        }
+        
+        function createAnalysisCard(analysis) {
+             let content = '';
+             if (analysis.type === 'LSTM') {
+                const returnColor = parseFloat(analysis.predicted_return) > 0 ? 'text-emerald-400' : 'text-red-400';
+                content = `<p><strong>Predicted Return (10-day):</strong> <span class="${returnColor}">${analysis.predicted_return}</span></p>`;
+             } else if (analysis.type === 'Fundamentals') {
+                const valuationColor = analysis.valuation.includes('Cheap') ? 'text-emerald-400' : 'text-red-400';
+                content = `<p><strong>P/E Ratio:</strong> ${analysis.pe_ratio.toFixed(2)}</p><p><strong>Valuation:</strong> <span class="${valuationColor}">${analysis.valuation}</span></p>`;
+             } else {
+                const trendColor = analysis.trend === 'Bullish' ? 'text-emerald-400' : 'text-red-400';
+                const momentumColor = analysis.momentum === 'Oversold' ? 'text-emerald-400' : 'text-red-400';
+                content = `<p><strong>Trend (SMA):</strong> <span class="${trendColor}">${analysis.trend}</span></p><p><strong>Momentum (RSI):</strong> <span class="${momentumColor}">${analysis.momentum}</span> (${analysis.rsi})</p>`;
+             }
+             return `<div class="bg-gray-200 dark:bg-gray-700/50 p-4 rounded-lg">
+                        <h4 class="font-bold text-lg">${analysis.name}</h4>
+                        <div class="mt-2 space-y-1 text-sm">${content}</div>
+                     </div>`;
+        }
+
+        // --- All Calculation Helpers and Model Logic ---
+        function calculateSMA(data, period) { if (data.length < period) return 0; return data.slice(-period).reduce((a, b) => a + b, 0) / period; }
+        function calculateRSI(data, period = 14) { if (data.length <= period) return 50; const prices = data.slice(-(period + 100)); let gains = [], losses = []; for (let i = 1; i < prices.length; i++) { const diff = prices[i] - prices[i - 1]; gains.push(diff > 0 ? diff : 0); losses.push(diff < 0 ? -diff : 0); } let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period; let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period; for (let i = period; i < gains.length; i++) { avgGain = (avgGain * (period - 1) + gains[i]) / period; avgLoss = (avgLoss * (period - 1) + losses[i]) / period; } if (avgLoss === 0) return 100; const rs = avgGain / avgLoss; return 100 - (100 / (1 + rs)); }
+        function calculateEMA(data, period) { const k = 2 / (period + 1); let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period; for (let i = period; i < data.length; i++) { ema = (data[i] * k) + (ema * (1 - k)); } return ema; }
+        function analyzeWithIndicators(prices, name) { const sma50 = calculateSMA(prices, 50); const sma200 = calculateSMA(prices, 200); const rsi14 = calculateRSI(prices, 14); let trend = "Neutral", momentum = "Neutral"; if (sma50 > sma200 * 1.01) trend = "Bullish"; if (sma50 < sma200 * 0.99) trend = "Bearish"; if (rsi14 > 70) momentum = "Overbought"; if (rsi14 < 30) momentum = "Oversold"; return { name, type: "Indicators", trend, momentum, rsi: rsi14.toFixed(2) }; }
+        function determineAllocationFromIndicators(nifty, smallcap, riskProfile) { let baseNifty, baseSmallcap; switch (riskProfile) { case 'conservative': [baseNifty, baseSmallcap] = [0.70, 0.30]; break; case 'aggressive': [baseNifty, baseSmallcap] = [0.30, 0.70]; break; default: [baseNifty, baseSmallcap] = [0.50, 0.50]; } let adjustment = 0; if (nifty.trend === "Bullish" && smallcap.trend !== "Bullish") adjustment += 0.15; if (smallcap.trend === "Bullish" && nifty.trend !== "Bullish") adjustment -= 0.15; let finalNifty = Math.max(0.05, Math.min(0.95, baseNifty + adjustment)); return { nifty: finalNifty, smallcap: 1 - finalNifty }; }
+        function analyzeWithLSTM(prices, name) { const sequence_length = 60; if (prices.length < sequence_length) return { name, predictedReturn: 0 }; const last_sequence = prices.slice(-sequence_length); const changes = []; for (let i = 1; i < last_sequence.length; i++) { changes.push(last_sequence[i] - last_sequence[i-1]); } const emaOfChanges = calculateEMA(changes, 10); const lastPrice = last_sequence[last_sequence.length - 1]; const predictedPrice = lastPrice + (emaOfChanges * 10); const predictedReturn = (predictedPrice - lastPrice) / lastPrice; return { name, type: "LSTM", predicted_return: (predictedReturn*100).toFixed(2) + '%' }; }
+        function determineAllocationFromLSTM(nifty, smallcap, riskProfile) { let baseNifty, baseSmallcap; switch (riskProfile) { case 'conservative': [baseNifty, baseSmallcap] = [0.70, 0.30]; break; case 'aggressive': [baseNifty, baseSmallcap] = [0.30, 0.70]; break; default: [baseNifty, baseSmallcap] = [0.50, 0.50]; } const returnDifference = parseFloat(nifty.predicted_return) - parseFloat(smallcap.predicted_return); const adjustment = (returnDifference / 100) * 5; let finalNifty = Math.max(0.05, Math.min(0.95, baseNifty + adjustment)); return { nifty: finalNifty, smallcap: 1 - finalNifty }; }
+        function analyzeWithFundamentals(peData, name) { const pe_ratio = peData.pe_ratio; let valuation = "Neutral"; if (pe_ratio > 25) valuation = "High (Expensive)"; if (pe_ratio < 18) valuation = "Low (Cheap)"; return { name, type: "Fundamentals", pe_ratio, valuation }; }
+        function determineAllocationFromFundamentals(nifty, riskProfile) { let baseNifty, baseSmallcap; switch (riskProfile) { case 'conservative': [baseNifty, baseSmallcap] = [0.70, 0.30]; break; case 'aggressive': [baseNifty, baseSmallcap] = [0.30, 0.70]; break; default: [baseNifty, baseSmallcap] = [0.50, 0.50]; } let adjustment = 0; if (nifty.valuation.includes("High")) adjustment = -0.20; if (nifty.valuation.includes("Low")) adjustment = 0.20; let finalNifty = Math.max(0.05, Math.min(0.95, baseNifty + adjustment)); return { nifty: finalNifty, smallcap: 1 - finalNifty }; }
+        function determineAllocationFromCombined(tech_nifty, tech_smallcap, lstm_nifty, lstm_smallcap, fund_nifty, risk) { let baseNifty, baseSmallcap; switch (risk) { case 'conservative': [baseNifty, baseSmallcap] = [0.70, 0.30]; break; case 'aggressive': [baseNifty, baseSmallcap] = [0.30, 0.70]; break; default: [baseNifty, baseSmallcap] = [0.50, 0.50]; } let nifty_score = 0; if (tech_nifty.trend === 'Bullish') nifty_score += 1.0; if (tech_nifty.trend === 'Bearish') nifty_score -= 1.0; if (parseFloat(lstm_nifty.predicted_return) > parseFloat(lstm_smallcap.predicted_return)) nifty_score += 1.5; else nifty_score -= 1.5; if (fund_nifty.valuation === 'Low (Cheap)') nifty_score += 1.0; if (fund_nifty.valuation === 'High (Expensive)') nifty_score -= 1.0; const adjustment = (nifty_score / 3.5) * 0.35; let finalNifty = Math.max(0.05, Math.min(0.95, baseNifty + adjustment)); return { nifty: finalNifty, smallcap: 1 - finalNifty }; }
+
+        // --- UI Helpers ---
+        function showStatus(message, type = 'info') {
+            statusEl.innerHTML = message;
+            statusEl.classList.remove('hidden');
+        }
+        
+        function resetUI() {
+            allocationContainer.classList.add('hidden');
+            analysisContainer.classList.add('hidden');
+            suggestionsContainer.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
+
